@@ -1,0 +1,393 @@
+{
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Description":"Cloud Formation Template - CSYE6225 - Creating EC2 instance , Security Groups and Ingress Rules",
+   "Parameters":{
+      "EC2Name":{
+         "Type":"String"
+      },
+      "EC2SecurityGroup":{
+         "Type":"String"
+      },
+      "SubnetId1":{
+         "Type":"String"
+      },
+      "VpcId":{
+         "Type":"String"
+      },
+      "EC2VolumeSize":{
+         "Type":"String"
+      },
+      "EC2VolumeType":{
+         "Type":"String"
+      },
+      "AMIImage":{
+         "Type":"String"
+      },
+      "DynamoDBName":{
+         "Type":"String"
+      },
+      "BucketName":{
+         "Type":"String"
+      },
+      "MasterUsername":{
+         "Type":"String"
+      },
+      "MasterUserPwd":{
+         "Type":"String"
+      },
+      "DBName":{
+         "Type":"String"
+      },
+      "DBInstanceClass":{
+         "Type":"String"
+      },
+      "DBInstanceIdentifier":{
+         "Type":"String"
+      },
+      "DBEngine":{
+         "Type":"String"
+      },
+      "SubnetId2":{
+         "Type":"String"
+      },
+      "SubnetId3":{
+         "Type":"String"
+      },
+      "RDSSecurityGroup":{
+         "Type":"String"
+      },
+      "EC2RoleName":{
+         "Type":"String"
+      },
+      "SNSTopicArn":{
+         "Type":"String"
+      },
+      "LambdaRoleArn":{
+         "Type":"String"
+      }
+   },
+   "Resources":{
+      "ourEC2Instance":{
+         "Type":"AWS::EC2::Instance",
+         "Properties":{
+            "InstanceType":"t2.micro",
+            "DisableApiTermination":true,
+            "ImageId":{
+               "Ref":"AMIImage"
+            },
+            "KeyName":{
+               "Ref":"EC2Name"
+            },
+            "UserData":{
+               "Fn::Base64":{
+                  "Fn::Join":[
+                     "\n",
+                     [
+                        "#!/bin/bash -xe ",
+                        "sudo bash",
+                        "yum install httpd -y",
+                        "systemctl enable httpd.service",
+                        "systemctl start httpd.service",
+                        "yum update -y",
+                        "yum install ruby -y",
+                        "yum install wget -y",
+                        "yum install python -y",
+                        "wget https://aws-codedeploy-us-east-1.s3.amazonaws.com/latest/install",
+                        "chmod +x ./install",
+                        "./install auto",
+                        "service codedeploy-agent start",
+                        "yum install ruby ntp wget java-1.8.0-openjdk-devel -y",
+                        "systemctl start ntpd",
+                        "systemctl enable ntpd",
+                        "groupadd tomcat",
+                        "useradd -M -s /bin/nologin -g tomcat -d /opt/tomcat tomcat",
+                        "cd /tmp",
+                        "wget http://apache.mirrors.pair.com/tomcat/tomcat-8/v8.5.34/bin/apache-tomcat-8.5.34.tar.gz",
+                        "mkdir /opt/tomcat",
+                        "sudo tar xvf apache-tomcat-8*tar.gz -C /opt/tomcat --strip-components=1",
+                        "cd /opt/tomcat",
+                        "chgrp -R tomcat /opt/tomcat",
+                        "chmod -R g+r conf",
+                        "chmod g+x conf",
+                        "chown -R tomcat webapps/ work/ temp/ logs/",
+                        "cd /opt && sudo chown -R tomcat tomcat/",
+                        "cd /opt/tomcat",
+                        "mkdir uploads",
+                        "chmod o+rwx uploads/",
+                        "cd /etc/systemd/system",
+                        "touch tomcat.service",
+                        "echo '[Unit]' > tomcat.service",
+                        "echo 'Description=Apache Tomcat Web Application Container' >> tomcat.service",
+                        "echo 'After=syslog.target network.target' >> tomcat.service",
+                        "echo '[Service]' >> tomcat.service",
+                        "echo 'Type=forking' >> tomcat.service",
+                        "echo 'Environment=JAVA_HOME=/usr/lib/jvm/jre' >> tomcat.service",
+                        "echo 'Environment=CATALINA_PID=/opt/tomcat/temp/tomcat.pid' >> tomcat.service",
+                        "echo 'Environment=CATALINA_HOME=/opt/tomcat' >> tomcat.service",
+                        "echo 'Environment=CATALINA_BASE=/opt/tomcat' >> tomcat.service",
+                        "echo 'Environment=\"CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC\"' >> tomcat.service",
+                        "echo 'Environment=\"JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom\"' >> tomcat.service",
+                        "echo 'ExecStart=/opt/tomcat/bin/startup.sh' >> tomcat.service",
+                        "echo 'ExecStop=/bin/kill -15 $MAINPID' >> tomcat.service",
+                        "echo 'User=tomcat' >> tomcat.service",
+                        "echo 'Group=tomcat' >> tomcat.service",
+                        "echo 'UMask=0007' >> tomcat.service",
+                        "echo 'RestartSec=10' >> tomcat.service",
+                        "echo 'Restart=always' >> tomcat.service",
+                        "echo '[Install]' >> tomcat.service",
+                        "echo 'WantedBy=multi-user.target' >> tomcat.service",
+                        "cd /opt/tomcat/bin",
+                        "touch setenv.sh",
+                        "echo 'JAVA_OPTS=\"-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true\"' >> setenv.sh",
+                        {
+                           "Fn::Join":[
+                              "",
+                              [
+                                 "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dspring.datasource.url=jdbc:mysql://",
+                                 {
+                                    "Fn::GetAtt":[
+                                       "ourRDSInstance",
+                                       "Endpoint.Address"
+                                    ]
+                                 },
+                                 ":3306/csye6225\"' >> setenv.sh \n"
+                              ]
+                           ]
+                        },
+                        {
+                           "Fn::Join":[
+                              "",
+                              [
+                                 "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dspring.datasource.username=",
+                                 {
+                                    "Ref":"MasterUsername"
+                                 },
+                                 "\"' >> setenv.sh \n"
+                              ]
+                           ]
+                        },
+                        {
+                           "Fn::Join":[
+                              "",
+                              [
+                                 "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dspring.datasource.password=",
+                                 {
+                                    "Ref":"MasterUserPwd"
+                                 },
+                                 "\"' >> setenv.sh \n"
+                              ]
+                           ]
+                        },
+                        {
+                           "Fn::Join":[
+                              "",
+                              [
+                                 "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dbucket.name=",
+                                 {
+                                    "Ref":"BucketName"
+                                 },
+                                 "\"' >> setenv.sh \n"
+                              ]
+                           ]
+                        },
+                        {
+                           "Fn::Join":[
+                              "",
+                              [
+                                 "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dsns.arn=",
+                                 {
+                                    "Ref":"SNSTopicArn"
+                                 },
+                                 "\"' >> setenv.sh \n"
+                              ]
+                           ]
+                        },
+                        "sudo echo 'JAVA_OPTS=\"$JAVA_OPTS -Dspring.profiles.active=aws\"' >> setenv.sh \n",
+                        "systemctl daemon-reload",
+                        "systemctl enable tomcat.service",
+                        "systemctl start tomcat.service",
+                        "mkdir -p /var/awslogs/etc/",
+                        "cd /var/awslogs/etc/",
+                        "sudo wget https://s3.amazonaws.com/amazoncloudwatch-agent/centos/amd64/latest/amazon-cloudwatch-agent.rpm",
+                        "sudo rpm -U ./amazon-cloudwatch-agent.rpm",
+                        "cd /opt/aws/amazon-cloudwatch-agent/bin/",
+                        "touch cloudwatch-config.json",
+                        "echo '{\"agent\": {\"metrics_collection_interval\": 10,\"logfile\": \"/var/logs/amazon-cloudwatch-agent.log\"},\"logs\": {\"logs_collected\": {\"files\": {\"collect_list\": [{\"file_path\": \"/opt/tomcat/logs/catalina.out\",\"log_group_name\": \"csye6225_fall2018\",\"log_stream_name\": \"webapp\",\"timestamp_format\": \"%H:%M:%S %y %b %-d\"}]}}},\"metrics\": {\"metrics_collected\": {\"statsd\": {\"service_address\": \":8125\",\"metrics_collection_interval\": 10,\"metrics_aggregation_interval\": 0}}}}' >> cloudwatch-config.json",
+                        "sudo ./amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/bin/cloudwatch-config.json -s",
+                        "systemctl daemon-reload",
+                        "systemctl start amazon-cloudwatch-agent.service",
+                        "systemctl stop amazon-cloudwatch-agent.service",
+                        "systemctl restart amazon-cloudwatch-agent.service",
+                        "yum install mariadb mariadb-server -y",
+                        "systemctl enable mariadb.service",
+                        "systemctl start mariadb.service"
+                     ]
+                  ]
+               }
+            },
+            "BlockDeviceMappings":[
+               {
+                  "DeviceName":"/dev/sda1",
+                  "Ebs":{
+                     "DeleteOnTermination":true,
+                     "VolumeSize":{
+                        "Ref":"EC2VolumeSize"
+                     },
+                     "VolumeType":{
+                        "Ref":"EC2VolumeType"
+                     }
+                  }
+               }
+            ],
+            "Tags":[
+               {
+                  "Key":"Name",
+                  "Value":{
+                     "Ref":"EC2Name"
+                  }
+               }
+            ],
+            "SecurityGroupIds":[
+               {
+                  "Ref":"EC2SecurityGroup"
+               }
+            ],
+            "SubnetId":{
+               "Ref":"SubnetId1"
+            },
+            "IamInstanceProfile":{
+               "Ref":"ourIAMInstanceProfile"
+            }
+         },
+         "DependsOn":"ourRDSInstance"
+      },
+      "ourIAMInstanceProfile":{
+         "Type":"AWS::IAM::InstanceProfile",
+         "Properties":{
+            "Path":"/",
+            "Roles":[
+               {
+                  "Ref":"EC2RoleName"
+               }
+            ]
+         }
+      },
+      "ourDynamoTable":{
+         "Type":"AWS::DynamoDB::Table",
+         "Properties":{
+            "KeySchema":[
+               {
+                  "AttributeName":"id",
+                  "KeyType":"HASH"
+               }
+            ],
+            "AttributeDefinitions":[
+               {
+                  "AttributeName":"id",
+                  "AttributeType":"S"
+               }
+            ],
+            "TableName":{
+               "Ref":"DynamoDBName"
+            },
+            "ProvisionedThroughput":{
+               "ReadCapacityUnits":"5",
+               "WriteCapacityUnits":"5"
+            }
+         }
+      },
+      "ourS3Bucket":{
+         "Type":"AWS::S3::Bucket",
+         "Description":"S3 Bucket to store attachment files",
+         "Properties":{
+            "AccessControl":"Private",
+            "BucketName":{
+               "Ref":"BucketName"
+            }
+         }
+      },
+      "ourRDSDBSubnet":{
+         "Type":"AWS::RDS::DBSubnetGroup",
+         "Properties":{
+            "DBSubnetGroupDescription":"Subnet Group fro RDS Instance",
+            "SubnetIds":[
+               {
+                  "Ref":"SubnetId2"
+               },
+               {
+                  "Ref":"SubnetId3"
+               }
+            ]
+         }
+      },
+      "ourRDSInstance":{
+         "Type":"AWS::RDS::DBInstance",
+         "Properties":{
+            "AllocatedStorage":"10",
+            "MasterUsername":{
+               "Ref":"MasterUsername"
+            },
+            "MasterUserPassword":{
+               "Ref":"MasterUserPwd"
+            },
+            "MultiAZ":false,
+            "PubliclyAccessible":false,
+            "DBName":{
+               "Ref":"DBName"
+            },
+            "DBInstanceClass":{
+               "Ref":"DBInstanceClass"
+            },
+            "DBInstanceIdentifier":{
+               "Ref":"DBInstanceIdentifier"
+            },
+            "Engine":{
+               "Ref":"DBEngine"
+            },
+            "DBSubnetGroupName":{
+               "Ref":"ourRDSDBSubnet"
+            },
+            "VPCSecurityGroups":[
+               {
+                  "Ref":"RDSSecurityGroup"
+               }
+            ]
+         }
+      }
+   },
+   "Outputs":{
+      "InstanceId":{
+         "Description":"InstanceId of the newly created EC2 instance",
+         "Value":{
+            "Ref":"ourEC2Instance"
+         }
+      },
+      "AZ":{
+         "Description":"Availability Zone of the newly created EC2 instance",
+         "Value":{
+            "Fn::GetAtt":[
+               "ourEC2Instance",
+               "AvailabilityZone"
+            ]
+         }
+      },
+      "PublicDNS":{
+         "Description":"Public DNSName of the newly created EC2 instance",
+         "Value":{
+            "Fn::GetAtt":[
+               "ourEC2Instance",
+               "PublicDnsName"
+            ]
+         }
+      },
+      "PublicIP":{
+         "Description":"Public IP address of the newly created EC2 instance",
+         "Value":{
+            "Fn::GetAtt":[
+               "ourEC2Instance",
+               "PublicIp"
+            ]
+         }
+      }
+   }
+}

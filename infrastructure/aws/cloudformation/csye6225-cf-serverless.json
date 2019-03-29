@@ -1,0 +1,78 @@
+{
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Description":"Cloud Formation Template - CSYE6225 - Creating Lambda serverless stack",
+   "Parameters":{
+      "LambdaRoleArn":{
+         "Type":"String"
+      },
+      "LambdaS3Bucket":{
+         "Type":"String"
+      },
+      "FromEmailAddress":{
+         "Type":"String"
+      },
+      "DNS":{
+         "Type":"String"
+      }
+   },
+   "Resources":{
+      "ourSNSTopic":{
+         "Type":"AWS::SNS::Topic",
+         "Properties":{
+            "TopicName":"ForgotPassword",
+            "Subscription": [ {
+               "Endpoint":{
+                  "Fn::GetAtt": [
+                     "ourLambdaFunction",
+                     "Arn"
+                  ]
+               },
+               "Protocol": "lambda"
+            } ]
+         },
+         "DependsOn":"ourLambdaFunction"
+      },
+      "ourLambdaFunction":{
+         "Type":"AWS::Lambda::Function",
+         "Properties":{
+            "FunctionName":"MyLambdaFunction",
+            "Handler":"LogEvent::handleRequest",
+            "Role":{
+               "Ref":"LambdaRoleArn"
+            },
+            "Code":{
+               "S3Bucket":{
+                  "Ref":"LambdaS3Bucket"
+               },
+               "S3Key":"csye6225-fall2018-lambda-0.0.1.zip"
+            },
+            "Environment":{
+               "Variables":{
+               "DomainName":{"Ref":"DNS"},
+               "DynamoDBTableName":"csye6225",
+               "FromEmailAddress":{"Ref":"FromEmailAddress"}
+            }
+            },
+            "Runtime":"java8",
+            "Timeout":25,
+            "MemorySize":256
+         }
+      },
+      "ourLambdaResourcePolicy":{
+         "Type":"AWS::Lambda::Permission",
+         "Properties":{
+            "FunctionName":{
+               "Fn::GetAtt": [
+                  "ourLambdaFunction",
+                  "Arn"
+               ]
+            },
+            "Principal":"sns.amazonaws.com",
+            "Action":"lambda:InvokeFunction",
+            "SourceArn": {
+               "Ref":"ourSNSTopic"
+            }
+         }
+      }
+   }
+}
